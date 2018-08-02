@@ -1,0 +1,1 @@
+ubuntu ansible_host=localhost ansible_connection=ssh ansible_user=sarath ansible_password=sarath

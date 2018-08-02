@@ -1,0 +1,100 @@
+---
+ 
+- name: Install nginx
+  hosts: ubuntu
+  become: yes
+  become_method: sudo
+  gather_facts: true
+  tags: [nginx]
+  tasks:
+    - name: Install nginx
+      package: 
+        name: "{{ item }}"
+        state: latest
+      with_items: 
+        - nginx
+    - name: Allow Nginx Full
+      ufw:
+        rule: allow
+      name: Nginx Full
+      state: enabled
+    - name: Allow Nginx Full
+      ufw:
+        rule: allow
+      name: OpenSSH
+      state: enabled
+    - name: Start nginx 
+      service:
+        name: nginx
+        state: started
+    - wait_for:
+        port: 80
+        
+- name: Create SSL certificates
+  hosts: ubuntu
+  become: yes
+  become_method: sudo
+  gather_facts: true
+  tags: [ssl]
+  tasks:
+    - name: Install openssl
+      package:
+        name: "{{ item }}" 
+        state: latest
+      with_items:
+        - openssl
+        - python-openssl
+    - name: Generate an OpenSSL private key
+      openssl_privatekey:
+        path: /etc/ssl/private/google.com.pem
+    - name: Create directory
+      file:
+        path: /etc/ssl/csr
+        state: directory
+        mode: 0755
+    - name: Generate an OpenSSL Certificate Signing Request
+      openssl_csr:
+        path: /etc/ssl/csr/google.com.csr
+        privatekey_path: /etc/ssl/private/google.com.pem
+        country_name: IN
+        organization_name: Ansible
+        email_address: sarath@github.com
+        common_name: google.com
+    - name: Generate a self signed certificate
+      openssl_certificate:
+        path: /etc/ssl/certs/nginx-selfsigned.crt
+        privatekey_path: /etc/ssl/private/google.com.pem
+        csr_path: /etc/ssl/csr/google.com.csr
+        provider: selfsigned
+
+- name: Setup nginx with SSL
+  hosts: ubuntu
+  become: yes
+  become_method: sudo
+  gather_facts: true
+  tags: [https]
+  tasks:
+    - copy:
+        src: ../data/self-signed.conf
+        dest: /etc/nginx/snippets/self-signed.conf
+        owner: root
+        group: root
+        mode: 0644
+    - copy:
+        src: ../data/ssl-params.conf
+        dest: /etc/nginx/snippets/ssl-params.conf
+        owner: root
+        group: root
+        mode: 0644
+    - copy:
+        src: ../data/google.com
+        dest: /etc/nginx/sites-enabled/google.com
+        owner: root
+        group: root
+        mode: 0644
+    - name: Restart nginx
+      service:
+        name: nginx
+        state: restarted
+    - wait_for:
+        port: 443
